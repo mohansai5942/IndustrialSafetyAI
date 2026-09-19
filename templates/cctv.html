@@ -6,13 +6,14 @@
 <body><header><h1>Industrial Safety AI — CCTV Operations</h1><div style="margin-top:10px"><a href="/" style="display:inline-block;padding:9px 12px;border-radius:8px;background:#17283b;color:#fff;text-decoration:none;margin-right:6px">Dashboard</a><a href="/manual-analysis" style="display:inline-block;padding:9px 12px;border-radius:8px;background:#17283b;color:#fff;text-decoration:none">Manual Report Analysis</a></div><div class="sub">SIH Finals prototype • YOLO11 person detection • explainable SIF intelligence • decision-support only</div></header>
 <div class="wrap">
 <div id="alert" class="alert"><div id="alertTitle" class="big">🚨 SAFETY ALERT</div><div id="alertText"></div><div id="timer" style="margin-top:5px"></div><div id="escalation" style="margin-top:7px;font-weight:700"></div><div style="margin-top:8px"><button id="ackBtn" onclick="ack()">ACKNOWLEDGE / VERIFY</button></div></div>
-<div class="cards"><div class="card">RISK<div id="risk" class="big">0/100</div></div><div class="card">SEVERITY<div id="level" class="big">LOW</div></div><div class="card">WORKERS<div id="workers" class="big">0</div></div><div class="card">CAMERA<div id="camera" class="big">OFFLINE</div></div><div class="card">FPS<div id="fps" class="big">0</div></div></div>
+<div class="cards"><div class="card">RISK<div id="risk" class="big">0/100</div></div><div class="card">SEVERITY<div id="level" class="big">LOW</div></div><div class="card">WORKERS<div id="workers" class="big">0</div></div><div class="card">CAMERA<div id="camera" class="big">OFFLINE</div></div><div class="card">AI FPS<div id="fps" class="big">0</div></div></div>
 <div class="layout"><div class="card"><h3>🎥 Live Computer Vision</h3><p class="muted">Starting sends your camera video to this server for AI analysis. This is a shared monitoring station. Critical incidents may save evidence images.</p>
-<button id="startCamera" type="button">Start camera</button><button id="stopCamera" type="button" class="secondary" disabled>Stop camera</button>
-<p id="cameraStatus" role="status" aria-live="polite">Camera stopped.</p>
-<video id="processedVideo" autoplay playsinline muted style="width:100%;display:block;border-radius:9px;background:#05080b;aspect-ratio:16/9;object-fit:contain"></video>
-<details><summary>Local camera preview</summary><video id="localVideo" autoplay playsinline muted style="width:240px;max-width:100%"></video></details>
-<p class="muted">Main view: AI results. Local preview: unprocessed device video.</p>
+<button id="startCamera" type="button" disabled>Start camera</button><button id="stopCamera" type="button" class="secondary" disabled>Stop camera</button>
+<p id="cameraStatus" role="status" aria-live="polite">Loading camera controls… If this message remains, reload the page and check that JavaScript is enabled.</p>
+<noscript><p class="bad">JavaScript must be enabled to use your camera.</p></noscript>
+<video id="processedVideo" hidden autoplay playsinline muted style="width:100%;border-radius:9px;background:#05080b;aspect-ratio:16/9;object-fit:contain"></video>
+<video id="localVideo" autoplay playsinline muted style="width:100%;border-radius:9px;background:#05080b;aspect-ratio:16/9;object-fit:contain"></video>
+<p id="previewLabel" class="muted">Local preview appears here as soon as camera permission is granted.</p>
 <div id="events" class="metric" style="margin-top:10px"></div></div>
 <div class="card"><h3>🧠 Detected Safety Events</h3><div id="detect" class="metric"></div><div class="statusline" id="demoStatus"></div><hr><p class="muted">Live detectors use camera frames. The alarm activates for <b>HIGH or CRITICAL operational risk</b>. It continues until acknowledgement. After <b>15 seconds</b>, the next responsible person is notified if acknowledgement has not been received. Demo controls provide deterministic, safe signals for presentations.</p></div></div>
 <div class="two"><div class="card"><h3>🏭 Process Condition Simulation</h3><div class="controls"><label>Gas <input id="gas" type="range" min="0" max="150" value="10" oninput="sendInput('gas',this.value)"><span id="gasv">10</span> ppm</label><label>Temperature <input id="temperature" type="range" min="0" max="150" value="40" oninput="sendInput('temperature',this.value)"><span id="temperaturev">40</span> °C</label><label>Pressure <input id="pressure" type="range" min="0" max="15" step=".1" value="5" oninput="sendInput('pressure',this.value)"><span id="pressurev">5</span> bar</label><label>Equipment anomaly <input id="equipment" type="range" min="0" max="100" value="0" oninput="sendInput('equipment',this.value)"><span id="equipmentv">0</span></label></div><button onclick="preset('normal')">Normal</button><button onclick="preset('warning')">Warning</button><button class="danger" onclick="preset('critical')">Critical</button><button class="secondary" onclick="resetAll()">Reset</button></div>
@@ -20,101 +21,6 @@
 <div class="card" style="margin-top:12px"><h3>🎬 Safe Demo Controls</h3><p class="muted">These controls simulate the corresponding signal without creating a real hazard. Each selected state is kept active until toggled off or Reset All is used.</p><button id="btn-ppe" class="demo" onclick="demo('ppe')">🪖 Helmet / PPE</button><button id="btn-aerosol" class="demo" onclick="demo('aerosol')">💨 Smoke / Aerosol</button><button id="btn-fire" class="demo" onclick="demo('fire')">🔥 Fire-like</button><button id="btn-fall" class="demo" onclick="demo('fall')">🧍 Fall</button><button class="secondary" onclick="resetAll()">Reset All</button></div>
 <div class="card" style="margin-top:12px"><h3>📋 High-Risk Incident Records</h3><table><thead><tr><th>ID</th><th>Source</th><th>Time</th><th>Incident</th><th>Risk</th><th>SIF</th><th>Severity</th><th>Status</th><th>Report</th></tr></thead><tbody id="rows"></tbody></table></div>
 </div>
-<script>
-let peer=null, localStream=null, connectionToken=null, generation=0, connectionTimer=null;
-const statusMessage=text=>document.getElementById('cameraStatus').textContent=text;
-function waitForIce(pc){
- return new Promise((resolve,reject)=>{
-  const timer=setTimeout(()=>finish(new Error('ICE gathering timed out. Check network/TURN settings.')),15000);
-  function finish(error){clearTimeout(timer);pc.removeEventListener('icegatheringstatechange',check);pc.removeEventListener('connectionstatechange',check);error?reject(error):resolve()}
-  function check(){if(pc.connectionState==='closed')finish(new Error('Connection closed'));else if(pc.iceGatheringState==='complete')finish()}
-  pc.addEventListener('icegatheringstatechange',check);pc.addEventListener('connectionstatechange',check);check();
- });
-}
-async function stopCamera(message='Camera stopped.'){
- ++generation;clearTimeout(connectionTimer);
- const old=peer, token=connectionToken;peer=null;connectionToken=null;
- if(old)old.close();
- if(localStream)localStream.getTracks().forEach(track=>track.stop());
- localStream=null;
- document.getElementById('localVideo').srcObject=null;
- document.getElementById('processedVideo').srcObject=null;
- document.getElementById('startCamera').disabled=false;
- document.getElementById('stopCamera').disabled=true;
- statusMessage(message);
- if(token)fetch('/api/webrtc/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token}),keepalive:true}).catch(()=>{});
-}
-async function startCamera(){
- const id=++generation;
- document.getElementById('startCamera').disabled=true;
- document.getElementById('stopCamera').disabled=false;
- try{
-  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw new Error('Camera access requires HTTPS (or localhost).');
-  statusMessage('Allow camera access in your browser.');
-  const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:10,max:15},facingMode:{ideal:'environment'}}});
-  if(id!==generation){stream.getTracks().forEach(t=>t.stop());return}
-  localStream=stream;document.getElementById('localVideo').srcObject=stream;
-  stream.getVideoTracks()[0].addEventListener('ended',()=>{if(id===generation)stopCamera('Camera access ended.');});
-  const response=await fetch('/api/webrtc/config',{signal:AbortSignal.timeout(10000)});
-  if(!response.ok)throw new Error('Could not load connection settings.');
-  const config=await response.json();if(id!==generation)return;
-  const pc=new RTCPeerConnection(config);peer=pc;
-  pc.addEventListener('track',event=>{
-   if(id!==generation)return;
-   document.getElementById('processedVideo').srcObject=new MediaStream([event.track]);
-   document.getElementById('processedVideo').play().catch(()=>statusMessage('Tap the video to play results.'));
-  });
-  pc.addEventListener('connectionstatechange',()=>{
-   if(id!==generation)return;
-   if(pc.connectionState==='connected'){clearTimeout(connectionTimer);statusMessage('Connected. Waiting for AI results…');}
-   if(pc.connectionState==='failed'||pc.connectionState==='disconnected')stopCamera('Connection lost. Start again; check server/TURN connectivity.');
-  });
-  for(const track of stream.getTracks())pc.addTrack(track,stream);
-  statusMessage('Connecting to AI server…');
-  await pc.setLocalDescription(await pc.createOffer());await waitForIce(pc);
-  if(id!==generation)return;
-  const answerResponse=await fetch('/api/webrtc/offer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:pc.localDescription.type,sdp:pc.localDescription.sdp}),signal:AbortSignal.timeout(35000)});
-  const answer=await answerResponse.json();
-  if(!answerResponse.ok)throw new Error(answer.error||'Connection setup failed');
-  if(id!==generation){fetch('/api/webrtc/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:answer.token}),keepalive:true}).catch(()=>{});return}
-  connectionToken=answer.token;
-  await pc.setRemoteDescription({type:answer.type,sdp:answer.sdp});
-  if(id!==generation)return;
-  connectionTimer=setTimeout(()=>{if(id===generation&&pc.connectionState!=='connected')stopCamera('Connection timed out. Configure a reachable TURN relay.');},30000);
- }catch(error){
-  if(id!==generation)return;
-  const messages={NotAllowedError:'Camera permission denied. Allow access in browser settings.',NotFoundError:'No camera found on this device.',NotReadableError:'Camera unavailable or in use by another application.'};
-  stopCamera(messages[error.name]||error.message||'Unable to start camera.');
- }
-}
-document.getElementById('startCamera').addEventListener('click',startCamera);
-document.getElementById('stopCamera').addEventListener('click',()=>stopCamera());
-document.getElementById('processedVideo').addEventListener('playing',()=>statusMessage('Live AI results.'));
-document.getElementById('processedVideo').addEventListener('click',()=>document.getElementById('processedVideo').play().catch(()=>{}));
-window.addEventListener('pagehide',()=>stopCamera());
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&(peer||localStream))stopCamera('Camera stopped while this tab is hidden.');});
-const $=id=>document.getElementById(id);let previousAlarm=false;let alarmTimer=null;let audioCtx=null;let audioOsc=null;let audioGain=null;
-function startAlarmSound(){if(alarmTimer)return;try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();audioGain=audioCtx.createGain();audioGain.gain.value=.10;audioGain.connect(audioCtx.destination);alarmOscillator();alarmTimer=setInterval(alarmOscillator,900)}catch(e){}}
-function alarmOscillator(){if(!audioCtx||audioCtx.state==='closed')return;try{const osc=audioCtx.createOscillator();osc.type='square';osc.frequency.value=880;osc.connect(audioGain);osc.start();setTimeout(()=>{try{osc.stop()}catch(e){}},350)}catch(e){}}
-function stopAlarmSound(){if(alarmTimer){clearInterval(alarmTimer);alarmTimer=null}try{if(audioOsc)audioOsc.stop()}catch(e){}audioOsc=null}
-async function api(url,options={}){const r=await fetch(url,options);return r.json()}
-function post(url,data){return api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}
-async function sendInput(k,v){$(k+'v').textContent=v;await post('/api/inputs',{[k]:v})}
-async function demo(k){const r=await post('/api/demo',{key:k});if(!r.ok)return;refresh()}
-async function ack(){await post('/api/ack');refresh()}
-async function resetAll(){await post('/api/reset');refresh()}
-async function preset(p){const v=p==='normal'?{gas:10,temperature:40,pressure:5,equipment:0}:p==='warning'?{gas:45,temperature:70,pressure:6.8,equipment:40}:{gas:80,temperature:95,pressure:8.5,equipment:80};await post('/api/inputs',v);for(const [k,x] of Object.entries(v)){$(k).value=x;$(k+'v').textContent=x}refresh()}
-async function refresh(){
- try{const s=await api('/api/state');
- if(peer&&s.camera_error)statusMessage(s.camera_error);
- $('risk').textContent=s.risk+'/100';$('workers').textContent=s.workers;$('fps').textContent=s.camera_fps;$('camera').textContent=s.camera_ok?'ONLINE':'OFFLINE';$('camera').className='big '+(s.camera_ok?'low':'bad');$('level').textContent=s.level;$('level').className='big '+s.level.toLowerCase();
- $('events').innerHTML='<b>'+s.hazard+'</b><br>'+s.last_event+'<br><span class="muted">Gas '+s.gas+' ppm • Temp '+s.temperature+' °C • Pressure '+s.pressure+' bar • Equipment '+s.equipment+'</span>';
- $('detect').innerHTML='🚧 Restricted zone: <b>'+s.restricted+'</b><br>💨 Aerosol/mist: <b>'+(s.aerosol?'YES':'NO')+'</b><br>🔥 Fire-like visual: <b>'+(s.fire?'YES':'NO')+'</b><br>🧍 Possible fall: <b>'+(s.fall?'YES':'NO')+'</b><br>🪖 Helmet not verified: <b>'+s.helmet_not_verified+'</b><br>🎯 Vision confidence: <b>'+s.vision_confidence.toFixed(1)+'%</b>';
- const labels={ppe:'🪖 Helmet / PPE',aerosol:'💨 Aerosol',fire:'🔥 Fire-like',fall:'🧍 Fall'};$('demoStatus').innerHTML=Object.entries(s.demo).map(([k,v])=>`<span class="pill ${v?'on':'off'}">${labels[k]}: ${v?'ON':'OFF'}</span>`).join('');for(const k of Object.keys(labels))$('btn-'+k).classList.toggle('active',!!s.demo[k]);
- $('alert').style.display=s.alarm?'block':'none';$('alert').className='alert'+(s.level==='CRITICAL'?' critical-alert':'');$('alertTitle').textContent=s.level==='CRITICAL'?'🚨 CRITICAL SAFETY ALERT':'🚨 HIGH-RISK SAFETY ALERT';$('alertText').textContent=(s.hazard||'Safety event detected')+' • Risk '+s.risk+'/100';$('timer').textContent=s.ack_required?(s.escalated?'Escalation sent after 15 seconds. Acknowledgement is still required.':'Acknowledgement required within '+s.ack_seconds+' seconds.'):(s.acknowledged?'Acknowledged.':'');$('escalation').textContent=s.escalated?'Notification sent to '+(s.escalated_to||'Next Responsible Person / Area In-Charge'):'';$('ackBtn').disabled=!s.alarm;$('ackBtn').textContent='ACKNOWLEDGE / VERIFY';
- if(s.alarm&&!s.acknowledged)startAlarmSound();else stopAlarmSound();previousAlarm=s.alarm;await loadIncidents();
- }catch(e){}
-}
-async function loadIncidents(){const a=await api('/api/analytics');$('total').textContent=a.total;$('critical').textContent=a.critical;$('analytics').innerHTML=a.by_type.length?a.by_type.map(x=>'• '+x.type+' — '+x.count+' incident(s), avg risk <b>'+x.avg_risk+'/100</b>, max '+x.max_risk).join('<br>'):'No incidents yet.';const r=await api('/api/incidents');$('rows').innerHTML=r.map(x=>`<tr><td>${x.id}</td><td>${x.source||'CCTV / AI Vision'}</td><td>${x.timestamp}</td><td>${x.incident_type}</td><td>${x.risk}/100</td><td>${x.sif_classification||'Normal condition'}</td><td>${x.severity}</td><td>${x.status}</td><td><a href="/api/report/${x.id}">PDF</a></td></tr>`).join('')}
-setInterval(refresh,1000);refresh();
-</script></body></html>
+<script defer src="{{ url_for('static', filename='js/camera.js', v='camera-start-2') }}"></script>
+<script defer src="{{ url_for('static', filename='js/cctv.js', v='camera-start-2') }}"></script>
+</body></html>

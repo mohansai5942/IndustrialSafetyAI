@@ -6,7 +6,7 @@ Replace app.py, camera_ai.py, templates/cctv.html and requirements.txt with the 
 
 The browser requests camera permission with getUserMedia (no microphone), shows a local preview, and sends video through RTCPeerConnection. Flask exchanges the SDP offer/answer with aiortc. OpenCV/YOLO process received frames and aiortc returns annotated video. This is actual WebRTC media transport, not JPEG polling. Existing state polling, simulation controls, alarms and incident reports remain.
 
-Only the newest waiting frame is retained while inference runs. Inference runs off the WebRTC event loop. Stop, navigation, hidden tabs, failed connections, and stale streams release the connection and clear camera state. A second publisher receives HTTP 409 because the original application's risk state and incident store describe one shared monitoring station.
+Only the newest waiting frame is retained while inference runs. Inference runs off the WebRTC event loop. Stop, navigation, failed connections, and stale streams release the connection. The browser retains a local preview on connection failure until Stop is pressed. A second publisher receives HTTP 409 because the original application's risk state and incident store describe one shared monitoring station.
 
 ## Install and run
 
@@ -78,3 +78,13 @@ Use only opencv-python from requirements.txt, matching Ultralytics' declared dep
 Redeploy with a clean build after this change (Railway NO_CACHE=1 for one build, then remove it). Verify the build log names the builder and shows the runtime-check success message. Remove conflicting custom install/build/start commands or package override variables from Railway settings. Service root must be the repository root. Keep one replica and one Gunicorn worker.
 
 This targets the missing native-library failure. A successful Railway build/deploy still requires verification in Railway; no remote Railway deployment was executed during this edit. For browser video on Railway, configure a reachable TURN relay; the HTTPS web endpoint alone does not carry the WebRTC media.
+
+## Camera startup troubleshooting (camera-start-2)
+
+The camera controller now lives in static/js/camera.js; dashboard polling lives in static/js/cctv.js. The template loads both as versioned deferred scripts. Start is enabled only after its handler is registered. Camera controls ready confirms initialization; a page stuck on Loading camera controls indicates a missing/blocked script. Flask serves the CCTV page without caching.
+
+Click Start on the direct HTTPS /cctv URL, then allow camera access. Previously granted permission may not produce another dialog. The main preview immediately shows the local device video while Flask/WebRTC connects, and switches to AI video only after playback begins. LOCAL ONLY means camera permission/capture worked but AI signaling/media failed. The camera card is no longer overwritten by shared server polling. Console messages prefixed [camera] identify each startup/ICE step and errors. This implementation uses HTTP signaling plus WebRTC media, not WebSockets.
+
+Permission denial, missing devices, HTTP errors, connection timeouts and model errors are shown on the page. Stop releases camera tracks; late permission grants/SDP answers are cleaned up. Mobile permission-dialog visibility changes no longer cancel startup. No AbortSignal.timeout dependency is required.
+
+Validation: six Node regression tests passed (node --test tests/camera_logic.test.cjs), exercising DOM-ready binding, permission-before-network order, offer/answer flow, stop/retry, denial, local preview on signaling failure, late permission/offer cleanup and visibility changes with mocked media/DOM/network interfaces. Flask template and both static asset routes returned HTTP 200. Browser hardware permission dialogs and the live Railway/TURN connection were not tested here; Chromium installation was unavailable in this environment.

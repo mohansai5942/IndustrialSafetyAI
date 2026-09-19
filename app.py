@@ -164,7 +164,8 @@ def evaluation_loop():
 def dashboard(): return render_template("dashboard.html")
 
 @app.route("/cctv")
-def cctv_operations(): return render_template("cctv.html")
+def cctv_operations():
+    return render_template("cctv.html"), 200, {"Cache-Control": "no-store"}
 
 @app.route("/manual-analysis")
 def manual_analysis(): return render_template("manual.html")
