@@ -1,0 +1,98 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manual Report Analysis — Industrial Safety Intelligence</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1117;color:#e7edf1;font-family:Arial,Segoe UI,sans-serif}.top{height:64px;background:#111a22;border-bottom:1px solid #26333e;display:flex;align-items:center;justify-content:space-between;padding:0 28px}.brand{font-weight:700}.brand small{display:block;color:#81909d;font-size:11px;font-weight:400;margin-top:3px}.nav a{color:#a9bac5;text-decoration:none;font-size:12px;margin-left:18px}.wrap{max-width:1400px;margin:auto;padding:24px}.crumb{font-size:11px;color:#788792;margin-bottom:10px}.title{font-size:24px;margin:0 0 6px}.sub{color:#8e9ca6;font-size:13px;margin-bottom:20px}
+.toolbar{background:#121b23;border:1px solid #293742;border-radius:7px;padding:14px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}.toolbar button,.upload{border:1px solid #3a4b56;background:#1b2933;color:#e7edf1;padding:9px 12px;border-radius:4px;cursor:pointer;font-size:12px}.toolbar .primary{background:#526b49;border-color:#637f58}.toolbar .danger{background:#6c3535;border-color:#814444}.count{margin-left:auto;color:#8fa0aa;font-size:12px}.tablewrap{margin-top:14px;background:#121b23;border:1px solid #293742;border-radius:7px;overflow:auto}.table{width:100%;border-collapse:collapse;min-width:1050px}.table th{background:#17222b;color:#9eabb4;font-size:10px;text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:10px;border-bottom:1px solid #2b3943;position:sticky;top:0}.table td{padding:9px 10px;border-bottom:1px solid #222f38;font-size:12px;vertical-align:top}.table tr:last-child td{border-bottom:0}.id{color:#7f929d;font-family:monospace}.area{color:#b8c4cb}.report{max-width:600px;min-width:450px;line-height:1.45;color:#d2d9de}.pill{display:inline-block;border:1px solid #394b56;border-radius:12px;padding:3px 7px;font-size:10px}.low{color:#7fb18b}.medium{color:#d2b25b}.high{color:#d98e62}.critical{color:#df6670}.summary{margin-top:14px;display:grid;grid-template-columns:repeat(5,1fr);gap:9px}.stat{background:#121b23;border:1px solid #293742;border-radius:6px;padding:12px}.stat b{font-size:20px}.stat span{display:block;color:#7e8d97;font-size:10px;margin-top:4px}.results{display:none;margin-top:14px;background:#121b23;border:1px solid #293742;border-radius:7px;padding:15px}.bar{height:6px;background:#26343d;border-radius:4px;overflow:hidden;width:90px}.fill{height:100%;background:#6d8f77}.small{font-size:11px;color:#83929c}.message{padding:10px;border:1px solid #3a4b56;background:#101820;border-radius:5px;font-size:12px;margin-bottom:10px}
+@media(max-width:800px){.summary{grid-template-columns:1fr 1fr}.count{margin-left:0}}
+</style></head><body>
+<header class="top"><div class="brand">INDUSTRIAL SAFETY INTELLIGENCE<small>Manual UA / UC / Near-Miss Analysis</small></div><nav class="nav"><a href="/">Dashboard</a><a href="/cctv">CCTV Operations</a></nav></header>
+<main class="wrap">
+<div class="crumb">Operations / Manual Reports</div>
+<h1 class="title">Workplace Safety Report Review</h1>
+<div class="sub">Review 50 workplace reports together. The NLP/SIF engine screens each observation and highlights recurring precursor categories.</div>
+<div class="toolbar">
+<button class="primary" onclick="load50()">Load 50 workplace reports</button>
+<label class="upload">Import CSV <input id="file" type="file" accept=".csv,text/csv" hidden onchange="importCSV(event)"></label>
+<button onclick="analyzeBatch()">Analyze Reports</button>
+<button onclick="saveBatch()">Save analyzed records</button>
+<button class="danger" onclick="clearReports()">Clear</button>
+<span class="count" id="count">0 / 50 reports loaded</span>
+</div>
+<div class="message">Expected CSV columns: <b>report</b> (required), <b>area</b>, <b>date</b>, <b>type</b>. Reports are analyzed locally by the running prototype; no report needs to be entered one-by-one.</div>
+<section class="summary">
+<div class="stat"><b id="n">0</b><span>Reports loaded</span></div><div class="stat"><b id="done">0</b><span>Analyzed</span></div><div class="stat"><b id="sif">0</b><span>Potential SIF precursor records</span></div><div class="stat"><b id="high">0</b><span>High / Critical</span></div><div class="stat"><b id="common">—</b><span>Most frequent category</span></div>
+</section>
+<div class="tablewrap"><table class="table"><thead><tr><th>No.</th><th>Date</th><th>Area</th><th>Type</th><th>Observation</th><th>Result</th><th>Risk</th><th>SIF</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div id="results" class="results"><b>Analysis Summary</b><div id="resultText" class="small" style="margin-top:8px"></div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);let reports=[],results=[],loadedFromSample=false;
+const areas=["Crude Unit","Tank Farm","Maintenance Bay","Compressor Area","Loading Station","Boiler House","Workshop","Utilities","Pipe Rack","Warehouse"];
+const types=["Unsafe Condition","Unsafe Act","Near Miss","Safety Observation"];
+const samples=[
+"Worker entered the barricaded maintenance area while equipment isolation was not yet verified. No contact occurred.",
+"Gas detector alarm was found bypassed during routine inspection near the compressor skid.",
+"Technician started grinding without face shield; sparks were directed toward a nearby solvent container.",
+"During lifting, a suspended load swung outside the barricaded area and passed close to a worker.",
+"Loose electrical cable was lying across the access route near the pump house, creating a trip hazard.",
+"Worker climbed a temporary platform without connecting the available fall-arrest lanyard.",
+"Valve showed abnormal vibration and a small hydrocarbon smell was noticed during field inspection.",
+"Confined-space entry permit was available but atmospheric testing had not been completed before entry.",
+"Fire extinguisher access was blocked by stored material near the workshop entrance.",
+"Operator noticed a pressure rise above the normal operating band and stopped the equipment.",
+"Contract worker crossed a restricted vehicle route while a forklift was reversing.",
+"Steam line insulation was damaged and the exposed hot surface was accessible from the walkway.",
+"During maintenance, an energized panel was opened before the isolation point was independently checked.",
+"Oil spill was observed beside a rotating pump; no person was injured.",
+"Worker was carrying a heavy component down stairs while holding the handrail was not possible.",
+"Emergency exit door was partially obstructed by temporary tools and materials.",
+"Unsecured scaffold board moved when a worker stepped on it; the worker stepped back safely.",
+"Chemical container label was missing and the contents could not be immediately verified.",
+"High temperature reading was observed around a process line during normal inspection.",
+"Worker was seen using a ladder on uneven ground without securing it.",
+"Unexpected movement occurred when a valve actuator was tested; personnel were moved away.",
+"Smoke-like visual was reported near an electrical cabinet and the area was isolated for inspection.",
+"Compressed gas cylinder was stored without adequate restraint near the maintenance area.",
+"During vehicle loading, a person entered the reversing zone before the spotter gave clearance.",
+"Protective guard on rotating equipment was found loose during pre-start inspection.",
+"Worker attempted to clear a jam without following the equipment isolation procedure.",
+"Water leakage made the floor slippery beside the control-room entrance.",
+"Near miss occurred when a dropped tool landed close to a worker below an elevated platform.",
+"Portable electrical tool had a damaged cable and was removed from service.",
+"Emergency shower access was blocked by packaging material in the chemical handling area.",
+"Worker entered a tank farm zone without the required access authorization.",
+"Unusual equipment noise was noticed before startup and the unit was kept out of service.",
+"During welding, combustible material was found inside the hot-work exclusion area.",
+"Pressure gauge reading differed significantly from the expected process value.",
+"Worker was not wearing required hand protection while handling a sharp metal component.",
+"Temporary hose crossed a pedestrian path without a visible ramp or warning.",
+"Small chemical splash occurred during transfer; face protection was not being used.",
+"Forklift approached a pedestrian walkway at excessive speed; no contact occurred.",
+"Scaffold access ladder was incomplete and the work team stopped the job.",
+"Worker was observed standing under a suspended load during positioning.",
+"Gas detector reading increased rapidly during inspection and the area was evacuated for verification.",
+"Maintenance team found a corroded pipe support with visible deformation.",
+"Near miss occurred when a vehicle entered a one-way route in the wrong direction.",
+"Worker used a cutting tool without confirming the guard was correctly installed.",
+"Electrical cabinet door was left open in an area exposed to water spray.",
+"During pressure testing, personnel were initially positioned too close to the test boundary.",
+"Trip hazard was created by an extension lead running through the main walkway.",
+"Fall protection anchor point could not be verified before work at height started.",
+"Hot surface warning sign was missing near a steam system access point.",
+"Routine housekeeping inspection completed; no unsafe condition or near-miss was observed."
+];
+function makeSamples(){reports=samples.map((report,i)=>({date:`2026-09-${String(1+(i%16)).padStart(2,"0")}`,area:areas[i%areas.length],type:types[i%types.length],report}));}
+function render(){ $("count").textContent=`${reports.length} / 50 reports loaded`;$("n").textContent=reports.length;$("done").textContent=results.length;
+let sif=results.filter(x=>x.is_sif).length, high=results.filter(x=>["HIGH","CRITICAL"].includes(x.level)).length;$("sif").textContent=sif;$("high").textContent=high;
+let freq={};results.forEach(x=>freq[x.category]=(freq[x.category]||0)+1);let common=Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];$("common").textContent=common?common[0]:"—";
+$("rows").innerHTML=reports.map((r,i)=>{let x=results[i], lvl=x?x.level:"Pending";return `<tr><td class="id">${String(i+1).padStart(2,"0")}</td><td>${r.date||"—"}</td><td class="area">${r.area||"—"}</td><td><span class="pill">${r.type||"Observation"}</span></td><td class="report">${esc(r.report)}</td><td>${x?esc(x.category):'<span class="small">Pending</span>'}</td><td>${x?`<b class="${x.level.toLowerCase()}">${x.score}/100</b>`:"—"}</td><td>${x?(x.is_sif?`<span class="${x.level.toLowerCase()}">${x.level} SIF precursor</span>`:'<span class="low">Normal condition</span>'):"—"}</td></tr>`}).join("")}
+function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function load50(){makeSamples();results=[];loadedFromSample=true;render();window.scrollTo({top:0,behavior:"smooth"})}
+function clearReports(){reports=[];results=[];$("results").style.display="none";render()}
+function importCSV(e){let f=e.target.files[0];if(!f)return;let rd=new FileReader();rd.onload=()=>{let lines=rd.result.split(/\r?\n/).filter(x=>x.trim());if(!lines.length)return;let head=splitCSV(lines[0]).map(x=>x.toLowerCase().trim());let ri=head.indexOf("report");if(ri<0){alert("CSV needs a report column.");return}reports=lines.slice(1,51).map(line=>{let v=splitCSV(line);return{report:v[ri]||"",area:v[head.indexOf("area")]||"Imported",date:v[head.indexOf("date")]||"",type:v[head.indexOf("type")]||"Observation"}}).filter(x=>x.report.trim());results=[];render()};rd.readAsText(f)}
+function splitCSV(s){let a=[],cur="",q=false;for(let c of s){if(c=='"')q=!q;else if(c==","&&!q){a.push(cur.trim());cur=""}else cur+=c}a.push(cur.trim());return a.map(x=>x.replace(/^"|"$/g,""))}
+async function analyzeBatch(){if(!reports.length){load50()}if(!reports.length)return;$("results").style.display="block";$("resultText").textContent="Analyzing reports…";let r=await fetch("/api/nlp/batch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reports:reports.map(x=>x.report)})}).then(x=>x.json());if(!r.ok){$("resultText").textContent=r.error||"Report analysis failed.";return}results=r.results;render();let cats={};results.forEach(x=>cats[x.category]=(cats[x.category]||0)+1);let recurring=Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>`${x[0]} (${x[1]})`).join(" • ");$("resultText").innerHTML=`Processed <b>${results.length}</b> reports. Potential SIF precursor records: <b>${results.filter(x=>x.is_sif).length}</b>. Recurring categories: <b>${esc(recurring||"None")}</b>. Review flagged records against site procedure before action.`}
+async function saveBatch(){if(!results.length){alert("Analyze the reports first.");return}let r=await fetch("/api/nlp/batch-save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reports:reports.map(x=>x.report),results})}).then(x=>x.json());$("results").style.display="block";$("resultText").textContent=r.ok?`Saved ${r.saved} analyzed reports to the safety record. PDF reports were generated for the saved records.`:(r.error||"Save failed.");}
+load50();render();
+</script></body></html>

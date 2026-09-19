@@ -1,0 +1,52 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Industrial Safety Intelligence — Operations Dashboard</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1117;color:#e8edf2;font-family:Arial,Segoe UI,sans-serif}
+.top{height:64px;background:#111a22;border-bottom:1px solid #26333e;display:flex;align-items:center;justify-content:space-between;padding:0 28px}
+.brand{font-weight:700;letter-spacing:.2px}.brand small{display:block;color:#81909d;font-weight:400;font-size:11px;margin-top:3px}
+.user{font-size:12px;color:#a9b4bd}.wrap{max-width:1280px;margin:auto;padding:28px}
+.crumb{font-size:12px;color:#7f8c97;margin-bottom:12px}.title{font-size:28px;margin:0 0 7px}.sub{color:#91a0ac;font-size:13px;margin-bottom:25px}
+.paths{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.path{background:#121b23;border:1px solid #293742;border-radius:8px;padding:22px;min-height:265px;position:relative}
+.pathhead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #293742;padding-bottom:15px;margin-bottom:17px}
+.path h2{font-size:18px;margin:0}.status{font-size:11px;border:1px solid #38505e;padding:5px 8px;border-radius:4px;color:#a9c0cd}
+.icon{font-size:25px;margin-right:10px}.route{display:flex;align-items:center;gap:8px;margin:20px 0;font-size:12px;color:#b9c4cc;flex-wrap:wrap}
+.node{background:#18232c;border:1px solid #30414c;border-radius:5px;padding:8px 10px}.chev{color:#71828e;font-size:14px}
+.desc{font-size:13px;color:#8998a4;line-height:1.55;min-height:58px}.open{display:inline-block;margin-top:10px;padding:10px 15px;background:#1f6f8b;color:#fff;text-decoration:none;border-radius:5px;font-size:13px}
+.manual .open{background:#526b49}.lower{margin-top:22px;display:grid;grid-template-columns:1.3fr .7fr;gap:18px}
+.panel{background:#121b23;border:1px solid #293742;border-radius:8px;padding:18px}.panel h3{margin:0 0 12px;font-size:14px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.kpi{background:#0e161d;border:1px solid #25323c;border-radius:5px;padding:13px}.kpi b{font-size:22px}.kpi span{display:block;color:#7f8d98;font-size:11px;margin-top:5px}
+.note{font-size:12px;color:#7f8d98;line-height:1.55}
+@media(max-width:850px){.paths,.lower{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}}
+</style></head><body>
+<header class="top"><div class="brand">INDUSTRIAL SAFETY INTELLIGENCE<small>Operations &amp; SIF Prevention Console</small></div><div class="user">Safety Operations • Local System</div></header>
+<main class="wrap">
+<div class="crumb">Operations / Safety Intelligence</div>
+<h1 class="title">Safety Analysis Dashboard</h1>
+<div class="sub">Select an operational input path. Both paths write to the same incident and SIF intelligence record.</div>
+<section class="paths">
+<article class="path">
+<div class="pathhead"><h2><span class="icon">▣</span>CCTV Monitoring</h2><span class="status">LIVE / OFFLINE DEMO</span></div>
+<div class="route"><span class="node">Camera feed</span><span class="chev">›</span><span class="node">Vision events</span><span class="chev">›</span><span class="node">Risk engine</span><span class="chev">›</span><span class="node">Incident record</span></div>
+<p class="desc">Monitor workers, restricted zones, PPE, fall, smoke/fire-like signals and process conditions. Events are scored and sent for human verification.</p>
+<a class="open" href="/cctv">Open CCTV Operations →</a>
+</article>
+<article class="path manual">
+<div class="pathhead"><h2><span class="icon">▤</span>Manual Report Analysis</h2><span class="status">50 REPORTS / UA • UC • NEAR-MISS</span></div>
+<div class="route"><span class="node">~50 reports</span><span class="chev">›</span><span class="node">NLP extraction</span><span class="chev">›</span><span class="node">SIF screening</span><span class="chev">›</span><span class="node">Trend register</span></div>
+<p class="desc">Review up to 50 workplace observations together instead of entering one report at a time. Identify recurring SIF precursor patterns across the reports.</p>
+<a class="open" href="/manual-analysis">Open Report Analysis →</a>
+</article>
+</section>
+<div class="lower">
+<div class="panel"><h3>Unified Record</h3><div class="kpis"><div class="kpi"><b id="total">—</b><span>Recorded incidents</span></div><div class="kpi"><b id="critical">—</b><span>Critical / high risk</span></div><div class="kpi"><b id="open">—</b><span>Open actions</span></div></div></div>
+<div class="panel"><h3>Operational note</h3><div class="note">This prototype is a decision-support system. Detection and NLP results require site procedures and human verification before corrective action.</div></div>
+</div>
+</main>
+<script>
+fetch('/api/analytics').then(r=>r.json()).then(a=>{
+document.getElementById('total').textContent=a.total??0;
+document.getElementById('critical').textContent=a.critical??0;
+document.getElementById('open').textContent=a.open??0;
+}).catch(()=>{});
+</script></body></html>
