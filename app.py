@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import threading, time
 from flask import Flask, jsonify, render_template, request, Response, send_from_directory, abort
 from camera_ai import CameraAI
@@ -325,6 +326,7 @@ def evidence(name): return send_from_directory(incident_manager.evidence_dir,nam
 def main():
     threading.Thread(target=evaluation_loop,daemon=True).start()
     camera.start()
-    app.run(host="127.0.0.1",port=5000,debug=False,threaded=True)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
 
 if __name__=="__main__": main()
