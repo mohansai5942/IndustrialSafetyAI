@@ -1,8 +1,9 @@
 from pathlib import Path
-import os
 import threading, time
+import os, json
+from concurrent.futures import TimeoutError as FutureTimeout
 from flask import Flask, jsonify, render_template, request, Response, send_from_directory, abort
-from camera_ai import CameraAI
+from camera_ai import CameraAI, WebRTCService, CameraBusy
 from risk_engine import calculate_risk
 from incident_manager import IncidentManager
 from nlp_routes import register_nlp_routes
@@ -12,6 +13,7 @@ MODEL = BASE / "models" / "yolo11n.pt"
 MODEL.parent.mkdir(exist_ok=True)
 incident_manager = IncidentManager(BASE)
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 256 * 1024
 register_nlp_routes(app)
 lock = threading.Lock()
 
@@ -174,7 +176,8 @@ def public_demo(): return render_template("dashboard.html")
 def sif_analyzer(): return render_template("nlp.html")
 
 @app.route("/video_feed")
-def video_feed(): return Response(camera.mjpeg(), mimetype="multipart/x-mixed-replace; boundary=frame")
+def video_feed():
+    return jsonify(error="Open /cctv and start your browser camera"), 410
 
 @app.get("/api/state")
 def api_state():
@@ -323,10 +326,66 @@ def api_report(incident_id):
 @app.get("/evidence/<path:name>")
 def evidence(name): return send_from_directory(incident_manager.evidence_dir,name)
 
-def main():
-    threading.Thread(target=evaluation_loop,daemon=True).start()
-    camera.start()
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+# Empty ICE_SERVERS works on localhost/LAN only. For Internet deployment configure
+# STUN and TURN. This JSON is intentionally sent to browsers; use short-lived TURN
+# credentials behind authenticated access in production.
+ICE_SERVERS = json.loads(os.environ.get("ICE_SERVERS", "[]"))
+rtc = None
+_services_lock = threading.Lock()
 
-if __name__=="__main__": main()
+@app.before_request
+def ensure_services():
+    global rtc
+    # Starts inside the WSGI worker, including when launched as gunicorn app:app.
+    with _services_lock:
+        if rtc is None:
+            rtc = WebRTCService(camera, ICE_SERVERS)
+            threading.Thread(target=evaluation_loop, daemon=True).start()
+
+@app.get("/api/webrtc/config")
+def webrtc_config():
+    response = jsonify(iceServers=ICE_SERVERS)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+@app.post("/api/webrtc/offer")
+def webrtc_offer():
+    data = request.get_json(silent=True)
+    if (not isinstance(data, dict) or data.get("type") != "offer"
+            or not isinstance(data.get("sdp"), str) or not data["sdp"].startswith("v=0")):
+        return jsonify(error="A valid WebRTC video offer is required"), 400
+    future = rtc.submit(rtc.offer(data["sdp"]))
+    try:
+        response = jsonify(future.result(timeout=30))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except CameraBusy as exc:
+        return jsonify(error=str(exc)), 409
+    except FutureTimeout:
+        future.cancel()
+        return jsonify(error="WebRTC setup timed out. Check ICE/TURN configuration."), 504
+    except Exception:
+        app.logger.exception("WebRTC negotiation failed")
+        return jsonify(error="Could not negotiate video connection"), 400
+
+@app.post("/api/webrtc/stop")
+def webrtc_stop():
+    data = request.get_json(silent=True)
+    token = data.get("token") if isinstance(data, dict) else None
+    if not isinstance(token, str) or not token or len(token) > 128:
+        return jsonify(error="Connection token is required"), 400
+    future = rtc.submit(rtc.stop(token))
+    try:
+        stopped = future.result(timeout=10)
+        return jsonify(ok=stopped), 200 if stopped else 404
+    except FutureTimeout:
+        # Cleanup continues; do not cancel it while inference is finishing.
+        return jsonify(ok=True, stopping=True), 202
+
+
+def main():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")),
+            debug=False, threaded=True)
+
+if __name__ == "__main__":
+    main()

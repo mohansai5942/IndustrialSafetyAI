@@ -1,0 +1,13 @@
+providers = ["python"]
+
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.12"
+
+[phases.setup]
+aptPkgs = ["...", "libgl1", "libglib2.0-0", "libxcb1", "libxext6", "libxrender1", "libsm6", "libice6", "libx11-6", "libgomp1"]
+
+[phases.build]
+cmds = ["python scripts/check_runtime.py"]
+
+[start]
+cmd = "gunicorn --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:${PORT:-8080} app:app"

@@ -1,6 +1,8 @@
 Flask>=3.0,<4
-opencv-python-headless
+opencv-python>=4.8,<5,!=4.13.0.90
 numpy>=1.24
 ultralytics>=8.3
 reportlab>=4.0
 huggingface_hub>=0.24
+aiortc>=1.14,<2
+gunicorn>=23,<24

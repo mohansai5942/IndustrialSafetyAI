@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "python",
+  "packages": {
+    "python": "3.12"
+  },
+  "buildAptPackages": [
+    "libgl1",
+    "libglib2.0-0",
+    "libxcb1",
+    "libxext6",
+    "libxrender1",
+    "libsm6",
+    "libice6",
+    "libx11-6",
+    "libgomp1"
+  ],
+  "steps": {
+    "build": {
+      "commands": [
+        "python scripts/check_runtime.py"
+      ]
+    }
+  },
+  "deploy": {
+    "aptPackages": [
+      "libgl1",
+      "libglib2.0-0",
+      "libxcb1",
+      "libxext6",
+      "libxrender1",
+      "libsm6",
+      "libice6",
+      "libx11-6",
+      "libgomp1"
+    ],
+    "startCommand": "gunicorn --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:${PORT:-8080} app:app"
+  }
+}
